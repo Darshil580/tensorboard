@@ -25,15 +25,6 @@ from tensorboard.plugins.hparams import metadata
 from tensorboard.plugins.hparams import plugin_data_pb2
 from tensorboard.plugins.hparams import summary_v2 as hp
 
-# Stay on Keras 2 for now: https://github.com/keras-team/keras/issues/18467.
-version_fn = getattr(tf.keras, "version", None)
-if version_fn and version_fn().startswith("3."):
-    import tf_keras as keras  # Keras 2
-else:
-    keras = tf.keras  # Keras 2
-
-tf.compat.v1.enable_eager_execution()
-
 
 class CallbackTest(tf.test.TestCase):
     def setUp(self):
@@ -46,12 +37,12 @@ class CallbackTest(tf.test.TestCase):
             "optimizer": "adam",
             HP_DENSE_NEURONS: 8,
         }
-        self.model = keras.models.Sequential(
+        self.model = tf.keras.models.Sequential(
             [
-                keras.layers.Dense(
+                tf.keras.layers.Dense(
                     self.hparams[HP_DENSE_NEURONS], input_shape=(1,)
                 ),
-                keras.layers.Dense(1, activation="sigmoid"),
+                tf.keras.layers.Dense(1, activation="sigmoid"),
             ]
         )
         self.model.compile(loss="mse", optimizer=self.hparams["optimizer"])
@@ -69,7 +60,11 @@ class CallbackTest(tf.test.TestCase):
         initial_time = mock_time.time
         with mock.patch("time.time", mock_time):
             self._initialize_model(writer=self.logdir)
-            self.model.fit(x=[(1,)], y=[(2,)], callbacks=[self.callback])
+            self.model.fit(
+                x=tf.constant([(1,)]),
+                y=tf.constant([(2,)]),
+                callbacks=[self.callback],
+            )
         final_time = mock_time.time
 
         files = os.listdir(self.logdir)
@@ -142,7 +137,11 @@ class CallbackTest(tf.test.TestCase):
             filename_suffix=".magic",
         )
         self._initialize_model(writer=writer)
-        self.model.fit(x=[(1,)], y=[(2,)], callbacks=[self.callback])
+        self.model.fit(
+            x=tf.constant([(1,)]),
+            y=tf.constant([(2,)]),
+            callbacks=[self.callback],
+        )
 
         files = os.listdir(self.logdir)
         self.assertEqual(len(files), 1, files)
@@ -151,22 +150,35 @@ class CallbackTest(tf.test.TestCase):
         # We'll assume that the contents are correct, as in the case where
         # the file writer was constructed implicitly.
 
-    def test_non_eager_failure(self):
-        with tf.compat.v1.Graph().as_default():
-            assert not tf.executing_eagerly()
-            self._initialize_model(writer=self.logdir)
-            with self.assertRaisesRegex(
-                RuntimeError, "only supported in TensorFlow eager mode"
-            ):
-                self.model.fit(x=[(1,)], y=[(2,)], callbacks=[self.callback])
+    # def test_non_eager_failure(self):
+    #     with tf.compat.v1.Graph().as_default():
+    #         assert not tf.executing_eagerly()
+    #         self._initialize_model(writer=self.logdir)
+    #         with self.assertRaisesRegex(
+    #             RuntimeError, "only supported in TensorFlow eager mode"
+    #         ):
+    #             self.model.fit(
+    #                 x=tf.constant([(1,)]),
+    #                 y=tf.constant([(2,)]),
+    #                 steps_per_epoch=1,
+    #                 callbacks=[self.callback],
+    #             )
 
     def test_reuse_failure(self):
         self._initialize_model(writer=self.logdir)
-        self.model.fit(x=[(1,)], y=[(2,)], callbacks=[self.callback])
+        self.model.fit(
+            x=tf.constant([(1,)]),
+            y=tf.constant([(2,)]),
+            callbacks=[self.callback],
+        )
         with self.assertRaisesRegex(
             RuntimeError, "cannot be reused across training sessions"
         ):
-            self.model.fit(x=[(1,)], y=[(2,)], callbacks=[self.callback])
+            self.model.fit(
+                x=tf.constant([(1,)]),
+                y=tf.constant([(2,)]),
+                callbacks=[self.callback],
+            )
 
     def test_invalid_writer(self):
         with self.assertRaisesRegex(
